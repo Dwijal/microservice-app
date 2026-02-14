@@ -1,0 +1,67 @@
+trigger:
+  branches:
+    include:
+      - main
+      - feature/*
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  acrName: myacr.azurecr.io
+  imageName: order-service
+  imageTag: $(Build.SourceVersion)
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+
+- checkout: self
+
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.9'
+
+- script: |
+    pip install -r requirements.txt
+  displayName: Install Dependencies
+
+- script: |
+    echo "Running unit tests..."
+  displayName: Run Tests
+
+- task: Docker@2
+  displayName: Build and Push Image
+  inputs:
+    containerRegistry: 'ACR-ServiceConnection'
+    repository: $(imageName)
+    command: buildAndPush
+    Dockerfile: Dockerfile
+    tags: |
+      $(imageTag)
+
+# Create artifact metadata
+- script: |
+    mkdir -p build
+    echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(imageTag)\" }" > build/build-info.json
+  displayName: Create Build Info
+
+- publish: build
+  artifact: build-info
+
+# Deploy to DEV automatically
+- script: |
+    sed "s|IMAGE_PLACEHOLDER|$(acrName)/$(imageName):$(imageTag)|g" k8s/dev.yaml \
+    | sed "s|VERSION_PLACEHOLDER|$(imageTag)|g" > rendered.yaml
+  displayName: Render Dev Manifest
+
+- task: KubernetesManifest@1
+  displayName: Deploy to Dev
+  inputs:
+    action: deploy
+    manifests: rendered.yaml
+    kubernetesServiceConnection: AKS-Dev
+

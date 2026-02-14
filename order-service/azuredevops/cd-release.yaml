@@ -1,0 +1,87 @@
+trigger:
+  tags:
+    include:
+      - v*
+
+variables:
+  acrName: myacr.azurecr.io
+
+stages:
+
+# ======================
+# QA
+# ======================
+- stage: QA
+  jobs:
+  - deployment: QADeploy
+    environment: qa
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: build-info
+
+          - script: |
+              IMAGE=$(jq -r '.image' build-info/build-info.json)
+              TAG=$(jq -r '.tag' build-info/build-info.json)
+              sed "s|IMAGE_PLACEHOLDER|$(acrName)/$IMAGE:$TAG|g" k8s/qa.yaml \
+              | sed "s|VERSION_PLACEHOLDER|$TAG|g" > rendered.yaml
+            displayName: Render QA Manifest
+
+          - task: KubernetesManifest@1
+            inputs:
+              action: deploy
+              manifests: rendered.yaml
+              kubernetesServiceConnection: AKS-QA
+
+# ======================
+# UAT
+# ======================
+- stage: UAT
+  dependsOn: QA
+  jobs:
+  - deployment: UATDeploy
+    environment: uat
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: build-info
+          - script: |
+              IMAGE=$(jq -r '.image' build-info/build-info.json)
+              TAG=$(jq -r '.tag' build-info/build-info.json)
+              sed "s|IMAGE_PLACEHOLDER|$(acrName)/$IMAGE:$TAG|g" k8s/uat.yaml \
+              | sed "s|VERSION_PLACEHOLDER|$TAG|g" > rendered.yaml
+          - task: KubernetesManifest@1
+            inputs:
+              action: deploy
+              manifests: rendered.yaml
+              kubernetesServiceConnection: AKS-UAT
+
+# ======================
+# PROD
+# ======================
+- stage: Prod
+  dependsOn: UAT
+  jobs:
+  - deployment: ProdDeploy
+    environment: production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: build-info
+          - script: |
+              IMAGE=$(jq -r '.image' build-info/build-info.json)
+              TAG=$(jq -r '.tag' build-info/build-info.json)
+              sed "s|IMAGE_PLACEHOLDER|$(acrName)/$IMAGE:$TAG|g" k8s/prod.yaml \
+              | sed "s|VERSION_PLACEHOLDER|$TAG|g" > rendered.yaml
+          - task: KubernetesManifest@1
+            inputs:
+              action: deploy
+              manifests: rendered.yaml
+              kubernetesServiceConnection: AKS-Prod
+
