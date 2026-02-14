@@ -23,9 +23,7 @@ steps:
 
 - checkout: self
 
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '3.9'
+
 
 - script: |
     python3 --version
