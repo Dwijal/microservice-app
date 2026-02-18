@@ -43,7 +43,7 @@ steps:
     containerRegistry: 'dockersvn_WI'
     repository: $(imageName)
     command: buildAndPush
-    Dockerfile: Dockerfile
+    Dockerfile: order-service/Dockerfile
     tags: |
       $(imageTag)
 
