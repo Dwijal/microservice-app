@@ -13,12 +13,11 @@ spec:
       labels:
         app: order-service
     spec:
+      imagePullSecrets:
+        - name: dev-acr-secret
       containers:
         - name: order-service
-          image: IMAGE_PLACEHOLDER
-          env:
-            - name: APP_VERSION
-              value: VERSION_PLACEHOLDER
+          image: dwimicroservices.azurecr.io/order-service:latest
           ports:
             - containerPort: 5000
-
+          imagePullPolicy: Always
