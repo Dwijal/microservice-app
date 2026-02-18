@@ -10,7 +10,7 @@ pr:
       - main
 
 variables:
-  acrName: myacr.azurecr.io
+  acrName: dwimicroservices.azurecr.io
   imageName: order-service
   imageTag: $(Build.SourceVersion)
 
@@ -37,35 +37,32 @@ steps:
     echo "Running unit tests..."
   displayName: Run Tests
 
-# - task: Docker@2
-#   displayName: Build and Push Image
-#   inputs:
-#     containerRegistry: 'ACR-ServiceConnection'
-#     repository: $(imageName)
-#     command: buildAndPush
-#     Dockerfile: Dockerfile
-#     tags: |
-#       $(imageTag)
+- task: Docker@2
+  displayName: Build and Push Image
+  inputs:
+    containerRegistry: 'dockersvn_WI'
+    repository: $(imageName)
+    command: buildAndPush
+    Dockerfile: Dockerfile
+    tags: |
+      $(imageTag)
 
-# # Create artifact metadata
-# - script: |
-#     mkdir -p build
-#     echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(imageTag)\" }" > build/build-info.json
-#   displayName: Create Build Info
+# Create artifact metadata
+- script: |
+    mkdir -p build
+    echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(imageTag)\" }" > build/build-info.json
+  displayName: Create Build Info
 
-# - publish: build
-#   artifact: build-info
+- publish: build
+  artifact: build-info
 
-# # Deploy to DEV automatically
-# - script: |
-#     sed "s|IMAGE_PLACEHOLDER|$(acrName)/$(imageName):$(imageTag)|g" k8s/dev.yaml \
-#     | sed "s|VERSION_PLACEHOLDER|$(imageTag)|g" > rendered.yaml
-#   displayName: Render Dev Manifest
 
-# - task: KubernetesManifest@1
-#   displayName: Deploy to Dev
-#   inputs:
-#     action: deploy
-#     manifests: rendered.yaml
-#     kubernetesServiceConnection: AKS-Dev
-
+- task: KubernetesManifest@1
+  displayName: Deploy to Dev
+  inputs:
+    action: deploy
+    kubernetesServiceConnection: aks_dev_sp
+    namespace: dev
+    manifests: order-service/k8s/dev.yaml
+    containers: |
+      dwimicroservices.azurecr.io/order-service:$(imageTag)
