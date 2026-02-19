@@ -3,7 +3,6 @@ trigger: none
 variables:
   acrName: dwimicroservices.azurecr.io
   imageName: order-service
-  imageTag: $(Build.SourceVersion)
 
 pool:
   name: 'dwipool'
@@ -29,7 +28,7 @@ stages:
         python -m pip install --upgrade pip
         cd order-service
         pip install -r requirements.txt
-      displayName: Install Dependencies in venv
+      displayName: Install Dependencies
 
     - script: |
         echo "Running unit tests..."
@@ -43,11 +42,11 @@ stages:
         command: buildAndPush
         Dockerfile: order-service/Dockerfile
         tags: |
-          $(imageTag)
+          $(Build.BuildId)
 
     - script: |
         mkdir -p build
-        echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(imageTag)\" }" > build/build-info.json
+        echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(Build.BuildId)\" }" > build/build-info.json
       displayName: Create Build Info
 
     - publish: build
@@ -66,12 +65,16 @@ stages:
       runOnce:
         deploy:
           steps:
+
           - download: current
             artifact: build-info
 
+          # 🔥 Extract tag properly with output variable
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG]$TAG"
+              echo "Extracted tag: $TAG"
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
+            name: ExtractTag
             displayName: Extract Image Tag
 
           - task: KubernetesManifest@1
@@ -82,11 +85,11 @@ stages:
               namespace: dev
               manifests: order-service/k8s/dev.yaml
               containers: |
-                $(acrName)/$(imageName):$(IMAGE_TAG)
+                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
-# 3️⃣ QA DEPLOY (Approval via Environment)
+# 3️⃣ QA DEPLOY
 # ==================================================
 - stage: Deploy_QA
   dependsOn: Deploy_Dev
@@ -97,12 +100,14 @@ stages:
       runOnce:
         deploy:
           steps:
+
           - download: current
             artifact: build-info
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG]$TAG"
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
+            name: ExtractTag
             displayName: Extract Image Tag
 
           - task: KubernetesManifest@1
@@ -113,11 +118,11 @@ stages:
               namespace: qa
               manifests: order-service/k8s/qa.yaml
               containers: |
-                $(acrName)/$(imageName):$(IMAGE_TAG)
+                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
-# 4️⃣ UAT DEPLOY (Approval via Environment)
+# 4️⃣ UAT DEPLOY
 # ==================================================
 - stage: Deploy_UAT
   dependsOn: Deploy_QA
@@ -128,12 +133,14 @@ stages:
       runOnce:
         deploy:
           steps:
+
           - download: current
             artifact: build-info
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG]$TAG"
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
+            name: ExtractTag
             displayName: Extract Image Tag
 
           - task: KubernetesManifest@1
@@ -144,11 +151,11 @@ stages:
               namespace: uat
               manifests: order-service/k8s/uat.yaml
               containers: |
-                $(acrName)/$(imageName):$(IMAGE_TAG)
+                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
-# 5️⃣ PROD DEPLOY (Approval via Environment)
+# 5️⃣ PROD DEPLOY
 # ==================================================
 - stage: Deploy_Prod
   dependsOn: Deploy_UAT
@@ -159,12 +166,14 @@ stages:
       runOnce:
         deploy:
           steps:
+
           - download: current
             artifact: build-info
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG]$TAG"
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
+            name: ExtractTag
             displayName: Extract Image Tag
 
           - task: KubernetesManifest@1
@@ -175,4 +184,4 @@ stages:
               namespace: prod
               manifests: order-service/k8s/prod.yaml
               containers: |
-                $(acrName)/$(imageName):$(IMAGE_TAG)
+                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
