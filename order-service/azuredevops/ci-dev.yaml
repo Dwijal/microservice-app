@@ -70,7 +70,7 @@ stages:
             artifact: build-info
 
           - script: |
-              TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
+              TAG=$(cat $(Pipeline.Workspace)/build-info/build-info.json | jq -r .tag)
               IMAGE="$(acrName)/$(imageName):$TAG"
 
               echo "Deploying image: $IMAGE"
