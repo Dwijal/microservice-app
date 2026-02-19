@@ -7,7 +7,7 @@ VERSION = os.getenv("APP_VERSION", "1.0.0")
 
 @app.route("/")
 def home():
-    return f"Order Service Version {VERSION}"
+    return f"Order Service Version 123 {VERSION}"
 
 @app.route("/health")
 def health():
