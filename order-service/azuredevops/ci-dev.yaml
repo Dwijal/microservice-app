@@ -69,23 +69,23 @@ stages:
           - download: current
             artifact: build-info
 
-          # 🔥 Extract tag properly with output variable
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "Extracted tag: $TAG"
-              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
-            name: ExtractTag
-            displayName: Extract Image Tag
+              IMAGE="$(acrName)/$(imageName):$TAG"
 
-          - task: KubernetesManifest@1
+              echo "Deploying image: $IMAGE"
+
+              # Apply base manifest first
+              kubectl apply -f order-service/k8s/dev.yaml -n dev
+
+              # Update image dynamically
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n dev
+
+              # Wait for rollout
+              kubectl rollout status deployment/order-service -n dev
             displayName: Deploy to Dev
-            inputs:
-              action: deploy
-              kubernetesServiceConnection: aks_dev_sp
-              namespace: dev
-              manifests: order-service/k8s/dev.yaml
-              containers: |
-                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
@@ -106,19 +106,18 @@ stages:
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
-            name: ExtractTag
-            displayName: Extract Image Tag
+              IMAGE="$(acrName)/$(imageName):$TAG"
 
-          - task: KubernetesManifest@1
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/qa.yaml -n qa
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n qa
+
+              kubectl rollout status deployment/order-service -n qa
             displayName: Deploy to QA
-            inputs:
-              action: deploy
-              kubernetesServiceConnection: aks_qa_sp
-              namespace: qa
-              manifests: order-service/k8s/qa.yaml
-              containers: |
-                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
@@ -139,19 +138,18 @@ stages:
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
-            name: ExtractTag
-            displayName: Extract Image Tag
+              IMAGE="$(acrName)/$(imageName):$TAG"
 
-          - task: KubernetesManifest@1
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/uat.yaml -n uat
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n uat
+
+              kubectl rollout status deployment/order-service -n uat
             displayName: Deploy to UAT
-            inputs:
-              action: deploy
-              kubernetesServiceConnection: aks_uat_sp
-              namespace: uat
-              manifests: order-service/k8s/uat.yaml
-              containers: |
-                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
 
 
 # ==================================================
@@ -172,16 +170,15 @@ stages:
 
           - script: |
               TAG=$(cat $(Pipeline.Workspace)/build-info/build/build-info.json | jq -r .tag)
-              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$TAG"
-            name: ExtractTag
-            displayName: Extract Image Tag
+              IMAGE="$(acrName)/$(imageName):$TAG"
 
-          - task: KubernetesManifest@1
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/prod.yaml -n prod
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n prod
+
+              kubectl rollout status deployment/order-service -n prod
             displayName: Deploy to Prod
-            inputs:
-              action: deploy
-              kubernetesServiceConnection: aks_prod_sp
-              namespace: prod
-              manifests: order-service/k8s/prod.yaml
-              containers: |
-                $(acrName)/$(imageName):$(ExtractTag.IMAGE_TAG)
