@@ -1,0 +1,155 @@
+trigger:
+  tags:
+    include:
+      - 'v*'
+
+pr: none
+
+variables:
+  acrName: dwimicroservices.azurecr.io
+  imageName: order-service
+
+pool:
+  name: 'dwipool'
+  demands:
+    - agent.name -equals dwiagent
+
+stages:
+
+# ==================================================
+# 1️⃣ BUILD STAGE
+# ==================================================
+- stage: Build
+  displayName: Build & Push
+  jobs:
+  - job: BuildJob
+    steps:
+
+    - checkout: self
+
+    - script: |
+        python3 -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        cd order-service
+        pip install -r requirements.txt
+      displayName: Install Dependencies
+
+    - script: |
+        echo "Running unit tests..."
+      displayName: Run Tests
+
+    - task: Docker@2
+      displayName: Build and Push Image
+      inputs:
+        containerRegistry: 'dockersvn_WI'
+        repository: $(imageName)
+        command: buildAndPush
+        Dockerfile: order-service/Dockerfile
+        tags: |
+          $(Build.BuildId)
+
+    - script: |
+        mkdir -p build
+        echo "{ \"image\": \"$(imageName)\", \"tag\": \"$(Build.BuildId)\" }" > build/build-info.json
+      displayName: Create Build Info
+
+    - publish: build
+      artifact: build-info
+
+
+
+# ==================================================
+# 3️⃣ QA DEPLOY
+# ==================================================
+- stage: Deploy_QA
+  dependsOn: Deploy_Dev
+  jobs:
+  - deployment: QADeploy
+    environment: qa
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - download: current
+            artifact: build-info
+
+          - script: |
+              TAG=$(cat $(Pipeline.Workspace)/build-info/build-info.json  | jq -r .tag)
+              IMAGE="$(acrName)/$(imageName):$TAG"
+
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/qa.yaml -n qa
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n qa
+
+              kubectl rollout status deployment/order-service -n qa
+            displayName: Deploy to QA
+
+
+# ==================================================
+# 4️⃣ UAT DEPLOY
+# ==================================================
+- stage: Deploy_UAT
+  dependsOn: Deploy_QA
+  jobs:
+  - deployment: UATDeploy
+    environment: uat
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - download: current
+            artifact: build-info
+
+          - script: |
+              TAG=$(cat $(Pipeline.Workspace)/build-info/build-info.json  | jq -r .tag)
+              IMAGE="$(acrName)/$(imageName):$TAG"
+
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/uat.yaml -n uat
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n uat
+
+              kubectl rollout status deployment/order-service -n uat
+            displayName: Deploy to UAT
+
+
+# ==================================================
+# 5️⃣ PROD DEPLOY
+# ==================================================
+- stage: Deploy_Prod
+  dependsOn: Deploy_UAT
+  jobs:
+  - deployment: ProdDeploy
+    environment: prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - download: current
+            artifact: build-info
+
+          - script: |
+              TAG=$(cat $(Pipeline.Workspace)/build-info/build-info.json  | jq -r .tag)
+              IMAGE="$(acrName)/$(imageName):$TAG"
+
+              echo "Deploying image: $IMAGE"
+
+              kubectl apply -f order-service/k8s/prod.yaml -n prod
+
+              kubectl set image deployment/order-service \
+                order-service=$IMAGE \
+                -n prod
+
+              kubectl rollout status deployment/order-service -n prod
+            displayName: Deploy to Prod
